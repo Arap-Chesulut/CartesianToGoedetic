@@ -1,0 +1,295 @@
+/* Import IBM Plex fonts */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+:root {
+    --primary-color: #007bff;
+    --success-color: #28a745;
+    --warning-color: #ffc107;
+    --danger-color: #dc3545;
+    --info-color: #17a2b8;
+    
+    /* Font families */
+    --font-serif: 'IBM Plex Serif', 'Georgia', 'Times New Roman', serif;
+    --font-sans: 'IBM Plex Sans', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
+}
+
+body {
+    background-color: #f8f9fa;
+    font-family: var(--font-serif);
+    line-height: 1.6;
+}
+
+/* Headers use sans-serif for clean UI */
+h1, h2, h3, h4, h5, h6,
+.card-header,
+.nav-link,
+.btn,
+.badge,
+.form-label {
+    font-family: var(--font-sans);
+    font-weight: 600;
+}
+
+/* Data and code use monospace */
+pre,
+code,
+.table td,
+.table th,
+.form-control,
+.form-select,
+.alert code,
+.data-value,
+.math-number,
+.coordinate-value,
+.iteration-value {
+    font-family: var(--font-mono);
+}
+
+.header {
+    background: linear-gradient(135deg, var(--primary-color), var(--info-color));
+    color: white;
+    padding: 2rem;
+    border-radius: 10px;
+    margin-bottom: 2rem;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.header h1 {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.header .badge {
+    font-family: var(--font-mono);
+    background: rgba(255,255,255,0.2);
+}
+
+.card {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border: none;
+    margin-bottom: 1.5rem;
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid var(--primary-color);
+    font-weight: 600;
+    font-family: var(--font-sans);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 0.9rem;
+}
+
+.card-body {
+    font-family: var(--font-serif);
+}
+
+.btn {
+    border-radius: 5px;
+    padding: 0.5rem 1rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    font-family: var(--font-sans);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    font-size: 0.85rem;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.form-control, .form-select {
+    border-radius: 5px;
+    border: 1px solid #ced4da;
+    padding: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,0.25);
+}
+
+.form-label {
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 0.25rem;
+}
+
+.table {
+    background-color: white;
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.table thead th {
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.table tbody td {
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+}
+
+.table-striped tbody tr:nth-of-type(odd) {
+    background-color: rgba(0,123,255,0.05);
+}
+
+.alert {
+    border-radius: 5px;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    font-family: var(--font-serif);
+}
+
+.alert strong {
+    font-family: var(--font-sans);
+    font-weight: 600;
+}
+
+.badge {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    font-family: var(--font-mono);
+    font-weight: 500;
+}
+
+.tab-content {
+    padding: 1.5rem 0;
+}
+
+.nav-tabs .nav-link {
+    color: #495057;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    font-family: var(--font-sans);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    font-size: 0.85rem;
+}
+
+.nav-tabs .nav-link.active {
+    color: var(--primary-color);
+    border-bottom: 3px solid var(--primary-color);
+    background-color: transparent;
+    font-weight: 600;
+}
+
+.btn-group .btn {
+    margin-right: 0.5rem;
+}
+
+/* Mathematical notation */
+.equation {
+    font-family: var(--font-serif);
+    font-style: italic;
+    background: #f8f9fa;
+    padding: 0.5rem 1rem;
+    border-radius: 5px;
+    border-left: 3px solid var(--primary-color);
+}
+
+.variable {
+    font-family: var(--font-serif);
+    font-style: italic;
+    color: #dc3545;
+}
+
+.number {
+    font-family: var(--font-mono);
+    color: #28a745;
+}
+
+/* Data display */
+.coordinate-display {
+    font-family: var(--font-mono);
+    background: #f8f9fa;
+    padding: 0.2rem 0.5rem;
+    border-radius: 3px;
+}
+
+/* Iteration details */
+.iteration-details {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+}
+
+/* Result values */
+.result-value {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: #28a745;
+}
+
+/* Animation for loading states */
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.loading {
+    animation: pulse 1.5s infinite;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .header {
+        padding: 1rem;
+    }
+    
+    .btn-group {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .btn-group .btn {
+        margin-right: 0;
+        margin-bottom: 0.5rem;
+    }
+    
+    .table-responsive {
+        font-size: 0.9rem;
+    }
+}
+
+/* Print styles */
+@media print {
+    .btn, .nav-tabs, .card-header {
+        display: none !important;
+    }
+    
+    .card {
+        box-shadow: none;
+        border: 1px solid #ddd;
+    }
+    
+    .table thead th {
+        background-color: #f8f9fa !important;
+        color: black !important;
+    }
+    
+    body {
+        font-family: var(--font-serif);
+    }
+    
+    pre, code, .table td {
+        font-family: var(--font-mono);
+    }
+}
