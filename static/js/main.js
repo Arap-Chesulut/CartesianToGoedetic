@@ -1113,4 +1113,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialize with WGS84
     updateFromPreset('wgs84');
+
 });
+

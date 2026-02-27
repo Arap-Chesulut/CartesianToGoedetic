@@ -7,6 +7,7 @@ import csv
 from datetime import datetime
 import json
 import traceback
+import os
 
 app = Flask(__name__)
 CORS(app)
@@ -509,4 +510,5 @@ def export_csv():
     
     
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))  # Render provides the PORT variable
+    app.run(host='0.0.0.0', port=port)
