@@ -7,13 +7,13 @@ import csv
 from datetime import datetime
 import json
 import traceback
-import os
+import math
 
 app = Flask(__name__)
 CORS(app)
 
 class GeodeticConverter:
-    """Core conversion engine"""
+    """Core conversion engine for both directions"""
     
     def __init__(self, a, f):
         self.a = a
@@ -22,15 +22,43 @@ class GeodeticConverter:
         self.b = a * (1 - f)   # Semi-minor axis
         self.conversion_history = []  # Initialize history here
     
+    def dms_to_decimal(self, dms_str):
+        """
+        Convert DMS string to decimal degrees
+        Format: "DD° MM' SS.sss\" H" or "DD MM SS.sss H"
+        """
+        try:
+            # Remove degree symbol and split
+            dms_str = dms_str.replace('°', ' ').replace("'", ' ').replace('"', ' ').replace(',', '.')
+            parts = dms_str.strip().split()
+            
+            if len(parts) < 4:
+                raise ValueError("Invalid DMS format")
+            
+            degrees = float(parts[0])
+            minutes = float(parts[1])
+            seconds = float(parts[2])
+            hemisphere = parts[3].upper()
+            
+            decimal = degrees + minutes/60 + seconds/3600
+            
+            if hemisphere in ['S', 'W']:
+                decimal = -decimal
+            
+            return decimal
+        except Exception as e:
+            raise ValueError(f"DMS conversion error: {str(e)}")
+    
     def dms_format(self, decimal_degrees, is_latitude=True):
-        """Convert to Degrees Minutes Seconds format"""
+        """Convert decimal degrees to DMS format"""
         if decimal_degrees is None:
             return "Invalid"
         
         hemisphere = 'N' if is_latitude and decimal_degrees >= 0 else 'S' if is_latitude else 'E' if decimal_degrees >= 0 else 'W'
         
-        degrees = int(abs(decimal_degrees))
-        minutes_full = (abs(decimal_degrees) - degrees) * 60
+        abs_deg = abs(decimal_degrees)
+        degrees = int(abs_deg)
+        minutes_full = (abs_deg - degrees) * 60
         minutes = int(minutes_full)
         seconds = (minutes_full - minutes) * 60
         
@@ -45,9 +73,9 @@ class GeodeticConverter:
             'b': self.b
         }
     
-    def convert_point(self, X, Y, Z, point_name="Point", tolerance=1e-10, max_iterations=20):
+    def cartesian_to_geodetic(self, X, Y, Z, point_name="Point", tolerance=1e-10, max_iterations=20):
         """
-        Convert a single point with iteration tracking
+        Convert Cartesian coordinates to Geodetic (latitude, longitude, height)
         MINIMUM 3 ITERATIONS enforced for all points
         """
         # Store iteration details
@@ -90,6 +118,7 @@ class GeodeticConverter:
             
             result = {
                 'point_name': point_name,
+                'input_type': 'cartesian',
                 'X': float(X), 'Y': float(Y), 'Z': float(Z),
                 'latitude': float(np.degrees(lat)),
                 'latitude_rad': float(lat),
@@ -193,6 +222,7 @@ class GeodeticConverter:
         
         result = {
             'point_name': point_name,
+            'input_type': 'cartesian',
             'X': float(X), 'Y': float(Y), 'Z': float(Z),
             'latitude': float(np.degrees(lat)),
             'latitude_rad': float(lat),
@@ -209,6 +239,53 @@ class GeodeticConverter:
         # Store in history
         self.conversion_history.append(result)
         return result
+    
+    def geodetic_to_cartesian(self, lat_deg, lon_deg, h, point_name="Point"):
+        """
+        Convert Geodetic coordinates (latitude, longitude, height) to Cartesian (X, Y, Z)
+        Direct conversion - no iteration needed
+        """
+        # Convert to radians
+        lat = np.radians(lat_deg)
+        lon = np.radians(lon_deg)
+        
+        # Calculate radius of curvature in prime vertical
+        sin_lat = np.sin(lat)
+        cos_lat = np.cos(lat)
+        N = self.a / np.sqrt(1 - self.e2 * sin_lat**2)
+        
+        # Calculate Cartesian coordinates
+        X = (N + h) * cos_lat * np.cos(lon)
+        Y = (N + h) * cos_lat * np.sin(lon)
+        Z = (N * (1 - self.e2) + h) * sin_lat
+        
+        # Create result (no iterations needed for this direction)
+        result = {
+            'point_name': point_name,
+            'input_type': 'geodetic',
+            'latitude': float(lat_deg),
+            'latitude_rad': float(lat),
+            'longitude': float(lon_deg),
+            'longitude_rad': float(lon),
+            'height': float(h),
+            'X': float(X),
+            'Y': float(Y),
+            'Z': float(Z),
+            'N': float(N),
+            'sin_lat': float(sin_lat),
+            'cos_lat': float(cos_lat),
+            'converged': True,
+            'total_iterations': 1,  # Direct calculation
+            'ellipsoid_params': self.get_ellipsoid_params()
+        }
+        
+        # Store in history
+        self.conversion_history.append(result)
+        return result
+    
+    def convert_point(self, X, Y, Z, point_name="Point", tolerance=1e-10, max_iterations=20):
+        """Wrapper for backward compatibility"""
+        return self.cartesian_to_geodetic(X, Y, Z, point_name, tolerance, max_iterations)
 
 # Store converter instances in memory
 converters = {}
@@ -247,16 +324,16 @@ def init_converter():
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 400
 
-@app.route('/api/convert/single', methods=['POST'])
-def convert_single():
+@app.route('/api/convert/cartesian-to-geodetic', methods=['POST'])
+def convert_cartesian_to_geodetic():
     try:
         data = request.json
         session_id = data.get('session_id')
         
-        print(f"🔍 Single conversion request for session: {session_id}")
+        print(f"🔍 Cartesian→Geodetic request for session: {session_id}")
         
         if not session_id or session_id not in converters:
-            return jsonify({'success': False, 'error': 'Please initialize converter first (invalid or missing session)'}), 400
+            return jsonify({'success': False, 'error': 'Please initialize converter first'}), 400
         
         converter = converters[session_id]
         
@@ -265,22 +342,53 @@ def convert_single():
         Z = float(data['Z'])
         point_name = data.get('point_name', 'Point')
         
-        print(f"   Converting: {point_name} ({X}, {Y}, {Z})")
-        
-        result = converter.convert_point(X, Y, Z, point_name)
+        result = converter.cartesian_to_geodetic(X, Y, Z, point_name)
         
         # Add DMS format
         result['latitude_dms'] = converter.dms_format(result['latitude'], True)
         result['longitude_dms'] = converter.dms_format(result['longitude'], False)
-        
-        print(f"   ✅ Conversion complete. History length: {len(converter.conversion_history)}")
         
         return jsonify({
             'success': True,
             'result': result
         })
     except Exception as e:
-        print(f"❌ Error in convert_single: {str(e)}")
+        print(f"❌ Error: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+@app.route('/api/convert/geodetic-to-cartesian', methods=['POST'])
+def convert_geodetic_to_cartesian():
+    try:
+        data = request.json
+        session_id = data.get('session_id')
+        
+        print(f"🔍 Geodetic→Cartesian request for session: {session_id}")
+        
+        if not session_id or session_id not in converters:
+            return jsonify({'success': False, 'error': 'Please initialize converter first'}), 400
+        
+        converter = converters[session_id]
+        
+        lat = float(data['latitude'])
+        lon = float(data['longitude'])
+        h = float(data['height'])
+        point_name = data.get('point_name', 'Point')
+        
+        # Handle DMS input if provided
+        if data.get('latitude_dms'):
+            lat = converter.dms_to_decimal(data['latitude_dms'])
+        if data.get('longitude_dms'):
+            lon = converter.dms_to_decimal(data['longitude_dms'])
+        
+        result = converter.geodetic_to_cartesian(lat, lon, h, point_name)
+        
+        return jsonify({
+            'success': True,
+            'result': result
+        })
+    except Exception as e:
+        print(f"❌ Error: {str(e)}")
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 400
 
@@ -288,8 +396,9 @@ def convert_single():
 def convert_batch():
     try:
         session_id = request.form.get('session_id')
+        conversion_type = request.form.get('conversion_type', 'cartesian-to-geodetic')
         
-        print(f"🔍 Batch conversion request for session: {session_id}")
+        print(f"🔍 Batch request for session: {session_id}, type: {conversion_type}")
         
         if not session_id or session_id not in converters:
             return jsonify({'success': False, 'error': 'Please initialize converter first'}), 400
@@ -311,22 +420,23 @@ def convert_batch():
         for i, row in enumerate(reader, 1):
             try:
                 name = row.get('Point_Name', row.get('Point', row.get('Name', f"Point_{i}")))
-                X = float(row.get('X', row.get('X (m)', 0)))
-                Y = float(row.get('Y', row.get('Y (m)', 0)))
-                Z = float(row.get('Z', row.get('Z (m)', 0)))
                 
-                result = converter.convert_point(X, Y, Z, name)
-                
-                # Add DMS format
-                result['latitude_dms'] = converter.dms_format(result['latitude'], True)
-                result['longitude_dms'] = converter.dms_format(result['longitude'], False)
+                if conversion_type == 'cartesian-to-geodetic':
+                    X = float(row.get('X', row.get('X (m)', 0)))
+                    Y = float(row.get('Y', row.get('Y (m)', 0)))
+                    Z = float(row.get('Z', row.get('Z (m)', 0)))
+                    result = converter.cartesian_to_geodetic(X, Y, Z, name)
+                    result['latitude_dms'] = converter.dms_format(result['latitude'], True)
+                    result['longitude_dms'] = converter.dms_format(result['longitude'], False)
+                else:  # geodetic-to-cartesian
+                    lat = float(row.get('Latitude', row.get('lat', 0)))
+                    lon = float(row.get('Longitude', row.get('lon', 0)))
+                    h = float(row.get('Height', row.get('h', row.get('height', 0))))
+                    result = converter.geodetic_to_cartesian(lat, lon, h, name)
                 
                 results.append(result)
             except Exception as e:
                 errors.append(f"Row {i}: {str(e)}")
-        
-        print(f"   ✅ Batch complete. Processed: {len(results)}, Errors: {len(errors)}")
-        print(f"   History length now: {len(converter.conversion_history)}")
         
         return jsonify({
             'success': True,
@@ -336,7 +446,7 @@ def convert_batch():
             'total_errors': len(errors)
         })
     except Exception as e:
-        print(f"❌ Error in convert_batch: {str(e)}")
+        print(f"❌ Error: {str(e)}")
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 400
 
@@ -346,26 +456,19 @@ def generate_report():
         data = request.json
         session_id = data.get('session_id')
         
-        print(f"🔍 Report request for session: {session_id}")
-        
         if not session_id or session_id not in converters:
-            return jsonify({'success': False, 'error': 'No conversion history found - invalid session'}), 400
+            return jsonify({'success': False, 'error': 'No conversion history found'}), 400
         
         converter = converters[session_id]
         
-        # Check if history exists and has entries
-        if not hasattr(converter, 'conversion_history'):
-            converter.conversion_history = []
-        
-        if len(converter.conversion_history) == 0:
+        if not hasattr(converter, 'conversion_history') or len(converter.conversion_history) == 0:
             return jsonify({'success': False, 'error': 'No conversions performed yet'}), 400
         
-        print(f"   ✅ Report generated with {len(converter.conversion_history)} entries")
-        
-        # Add ellipsoid parameters to each history entry if not already there
+        # Add DMS format to any missing entries
         for entry in converter.conversion_history:
-            if 'ellipsoid_params' not in entry:
-                entry['ellipsoid_params'] = converter.get_ellipsoid_params()
+            if entry.get('input_type') == 'cartesian' and 'latitude_dms' not in entry:
+                entry['latitude_dms'] = converter.dms_format(entry['latitude'], True)
+                entry['longitude_dms'] = converter.dms_format(entry['longitude'], False)
         
         return jsonify({
             'success': True,
@@ -373,8 +476,6 @@ def generate_report():
             'ellipsoid_params': converter.get_ellipsoid_params()
         })
     except Exception as e:
-        print(f"❌ Error in generate_report: {str(e)}")
-        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 400
 
 @app.route('/api/clear', methods=['POST'])
@@ -385,11 +486,9 @@ def clear_history():
         
         if session_id in converters and hasattr(converters[session_id], 'conversion_history'):
             converters[session_id].conversion_history = []
-            print(f"✅ Cleared history for session {session_id}")
         
         return jsonify({'success': True})
     except Exception as e:
-        print(f"❌ Error in clear_history: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 400
 
 @app.route('/api/export/csv', methods=['POST'])
@@ -398,104 +497,68 @@ def export_csv():
         data = request.json
         session_id = data.get('session_id')
         
-        print(f"🔍 Export CSV request for session: {session_id}")
-        
         if not session_id or session_id not in converters:
-            return jsonify({'success': False, 'error': 'No results to export - invalid session'}), 400
+            return jsonify({'success': False, 'error': 'No results to export'}), 400
         
         converter = converters[session_id]
         
         if not hasattr(converter, 'conversion_history') or not converter.conversion_history:
             return jsonify({'success': False, 'error': 'No conversions to export'}), 400
         
-        # Create DataFrame with all parameters and iterations
+        # Create DataFrame
         data_rows = []
         for r in converter.conversion_history:
-            # Get ellipsoid parameters
             e_params = r.get('ellipsoid_params', converter.get_ellipsoid_params())
             
-            # Create detailed iteration summary with proper degree symbol
-            iter_details = []
-            for it in r.get('all_iterations', r['iterations']):
-                iter_details.append(
-                    f"Iter{it['iter']}: lat={it['lat']:.8f}° h={it['h']:.3f}m "
-                    f"Δlat={it['delta_lat_arcsec']:.6f}\" Δh={it['delta_h_mm']:.3f}mm"
-                )
-            
-            iter_summary = " | ".join(iter_details)
-            
-            # Get DMS with proper degree symbol
-            lat_dms = converter.dms_format(r['latitude'], True)
-            lon_dms = converter.dms_format(r['longitude'], False)
-            
-            # Add main row with all parameters
-            data_rows.append({
-                'Point_Name': r['point_name'],
-                'X_m': r['X'],
-                'Y_m': r['Y'],
-                'Z_m': r['Z'],
-                'Latitude_deg': r['latitude'],
-                'Longitude_deg': r['longitude'],
-                'Height_m': r['height'],
-                'Latitude_DMS': lat_dms,
-                'Longitude_DMS': lon_dms,
-                'Total_Iterations': r['total_iterations'],
-                'Converged': r['converged'],
-                'Ellipsoid_a_m': e_params['a'],
-                'Ellipsoid_f': e_params['f'],
-                'Ellipsoid_e2': e_params['e2'],
-                'Ellipsoid_b_m': e_params['b'],
-                'Iteration_Details': iter_summary
-            })
-            
-            # Add individual iteration rows for detailed analysis
-            for it in r.get('all_iterations', r['iterations']):
-                # Create DMS for this iteration's latitude
-                iter_lat_dms = converter.dms_format(it['lat'], True)
+            if r.get('input_type') == 'cartesian':
+                # Cartesian to Geodetic entry
+                iter_summary = "; ".join([f"Iter{it['iter']}:{it['lat']:.6f}°/{it['h']:.1f}m" 
+                                         for it in r.get('all_iterations', r.get('iterations', []))[:3]])
                 
                 data_rows.append({
-                    'Point_Name': f"{r['point_name']}_Iter{it['iter']}",
+                    'Conversion_Type': 'Cartesian→Geodetic',
+                    'Point_Name': r['point_name'],
                     'X_m': r['X'],
                     'Y_m': r['Y'],
                     'Z_m': r['Z'],
-                    'Latitude_deg': it['lat'],
+                    'Latitude_deg': r['latitude'],
                     'Longitude_deg': r['longitude'],
-                    'Height_m': it['h'],
-                    'Latitude_DMS': iter_lat_dms,
-                    'Longitude_DMS': lon_dms,
-                    'Total_Iterations': r['total_iterations'],
-                    'Converged': r['converged'],
-                    'Ellipsoid_a_m': e_params['a'],
-                    'Ellipsoid_f': e_params['f'],
-                    'Ellipsoid_e2': e_params['e2'],
-                    'Ellipsoid_b_m': e_params['b'],
-                    'Iteration_Number': it['iter'],
-                    'N_m': it.get('N', 0),
-                    'p_m': it.get('p', 0),
-                    'sin_lat': it.get('sin_lat', 0),
-                    'cos_lat': it.get('cos_lat', 0),
-                    'Delta_Lat_rad': it.get('delta_lat', 0),
-                    'Delta_Lat_arcsec': it.get('delta_lat_arcsec', 0),
-                    'Delta_H_m': it.get('delta_h', 0),
-                    'Delta_H_mm': it.get('delta_h_mm', 0)
+                    'Height_m': r['height'],
+                    'Latitude_DMS': converter.dms_format(r['latitude'], True),
+                    'Longitude_DMS': converter.dms_format(r['longitude'], False),
+                    'Iterations': r['total_iterations'],
+                    'Iteration_Details': iter_summary
+                })
+            else:
+                # Geodetic to Cartesian entry
+                data_rows.append({
+                    'Conversion_Type': 'Geodetic→Cartesian',
+                    'Point_Name': r['point_name'],
+                    'Latitude_deg': r['latitude'],
+                    'Longitude_deg': r['longitude'],
+                    'Height_m': r['height'],
+                    'Latitude_DMS': converter.dms_format(r['latitude'], True),
+                    'Longitude_DMS': converter.dms_format(r['longitude'], False),
+                    'X_m': r['X'],
+                    'Y_m': r['Y'],
+                    'Z_m': r['Z'],
+                    'N_m': r.get('N', 0),
+                    'Iterations': r['total_iterations']
                 })
         
         df = pd.DataFrame(data_rows)
         
-        # Create CSV in memory with UTF-8 encoding to preserve degree symbol
+        # Create CSV in memory with UTF-8 BOM for Excel
         output = io.StringIO()
         df.to_csv(output, index=False, encoding='utf-8')
         output.seek(0)
         
-        # Create bytes object for sending with UTF-8 BOM for Excel compatibility
         mem = io.BytesIO()
-        # Add UTF-8 BOM for Excel to recognize UTF-8
         mem.write('\ufeff'.encode('utf-8'))
         mem.write(output.getvalue().encode('utf-8'))
         mem.seek(0)
         
-        filename = f'conversion_results_detailed_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
-        print(f"   ✅ CSV exported: {filename} with {len(data_rows)} rows")
+        filename = f'conversion_results_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
         
         return send_file(
             mem,
@@ -504,11 +567,9 @@ def export_csv():
             download_name=filename
         )
     except Exception as e:
-        print(f"❌ Error in export_csv: {str(e)}")
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 400 
-    
-    
+        return jsonify({'success': False, 'error': str(e)}), 400
+
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))  # Render provides the PORT variable
-    app.run(host='0.0.0.0', port=port)
+    print("🚀 Starting Geodetic Converter Server...")
+    print("📡 Server will run at: http://127.0.0.1:5000")
+    app.run(debug=True, host='127.0.0.1', port=5000)

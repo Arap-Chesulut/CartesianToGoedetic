@@ -2,6 +2,40 @@
 let sessionId = null;
 let conversionHistory = [];
 
+// Ellipsoid presets database
+const ellipsoidPresets = {
+    wgs84: {
+        name: 'WGS84',
+        a: 6378137.0,
+        f_inv: 298.257223563,
+        f: 0.0033528106647474805
+    },
+    grs80: {
+        name: 'GRS80',
+        a: 6378137.0,
+        f_inv: 298.257222101,
+        f: 0.003352891869237217
+    },
+    clarke1866: {
+        name: 'Clarke 1866',
+        a: 6378206.4,
+        f_inv: 294.9786982,
+        f: 0.003390075303596789
+    },
+    bessel1841: {
+        name: 'Bessel 1841',
+        a: 6377397.155,
+        f_inv: 299.1528128,
+        f: 0.003342773154788677
+    },
+    airy1830: {
+        name: 'Airy 1830',
+        a: 6377563.396,
+        f_inv: 299.3249646,
+        f: 0.003340850718970756
+    }
+};
+
 // DOM Elements
 document.addEventListener('DOMContentLoaded', function() {
     console.log("🚀 Application loaded");
@@ -16,15 +50,47 @@ document.addEventListener('DOMContentLoaded', function() {
     // Toggle input methods
     document.getElementById('uploadRadio').addEventListener('change', toggleInputMethod);
     document.getElementById('pasteRadio').addEventListener('change', toggleInputMethod);
+    
+    // Toggle conversion type tabs
+    const cartesianTab = document.getElementById('cartesianToGeodeticTab');
+    const geodeticTab = document.getElementById('geodeticToCartesianTab');
+    
+    if (cartesianTab) cartesianTab.addEventListener('click', () => showConversionType('cartesian'));
+    if (geodeticTab) geodeticTab.addEventListener('click', () => showConversionType('geodetic'));
+    
+    // Initialize ellipsoid preset system
+    initEllipsoidPresets();
+    
+    // Initialize with cartesian view
+    showConversionType('cartesian');
 });
 
 function setupEventListeners() {
     // Initialize converter
     document.getElementById('initBtn').addEventListener('click', initConverter);
     
-    // Single point conversion
-    document.getElementById('convertSingleBtn').addEventListener('click', convertSingle);
-    document.getElementById('examplePoints').addEventListener('change', loadExample);
+    // Single point conversion - Cartesian to Geodetic
+    const convertCartesianBtn = document.getElementById('convertCartesianBtn');
+    if (convertCartesianBtn) {
+        convertCartesianBtn.addEventListener('click', convertCartesianToGeodetic);
+    } else {
+        // Fallback for backward compatibility
+        document.getElementById('convertSingleBtn').addEventListener('click', convertSingle);
+    }
+    
+    // Single point conversion - Geodetic to Cartesian
+    const convertGeodeticBtn = document.getElementById('convertGeodeticBtn');
+    if (convertGeodeticBtn) {
+        convertGeodeticBtn.addEventListener('click', convertGeodeticToCartesian);
+    }
+    
+    // Example points
+    document.getElementById('examplePoints').addEventListener('change', loadCartesianExample);
+    
+    const geodeticExample = document.getElementById('geodeticExamplePoints');
+    if (geodeticExample) {
+        geodeticExample.addEventListener('change', loadGeodeticExample);
+    }
     
     // Batch processing
     document.getElementById('showSampleBtn').addEventListener('click', showSample);
@@ -35,6 +101,113 @@ function setupEventListeners() {
     document.getElementById('printReportBtn').addEventListener('click', printReport);
     document.getElementById('saveCsvBtn').addEventListener('click', saveToCSV);
     document.getElementById('clearBtn').addEventListener('click', clearResults);
+}
+
+function initEllipsoidPresets() {
+    // Get DOM elements
+    const ellipsoidPreset = document.getElementById('ellipsoidPreset');
+    const aInput = document.getElementById('a_value');
+    const fInput = document.getElementById('f_value');
+    const fInvInput = document.getElementById('f_inv_value');
+    const ellipsoidName = document.getElementById('ellipsoidName');
+    const ellipsoidDetails = document.getElementById('ellipsoidDetails');
+
+    // Function to update inputs based on preset
+    function updateFromPreset(presetKey) {
+        if (presetKey === 'custom') {
+            // Enable manual input
+            aInput.readOnly = false;
+            fInvInput.readOnly = false;
+            fInput.readOnly = true; // f is still auto-calculated from 1/f
+            if (ellipsoidName) ellipsoidName.textContent = 'Custom Ellipsoid';
+            if (ellipsoidDetails) ellipsoidDetails.textContent = 'Enter your own parameters below';
+            return;
+        }
+
+        // Get preset data
+        const preset = ellipsoidPresets[presetKey];
+        if (!preset) return;
+
+        // Update inputs
+        aInput.value = preset.a;
+        fInvInput.value = preset.f_inv;
+        
+        // Calculate f from 1/f
+        const f = 1 / preset.f_inv;
+        fInput.value = f;
+        
+        // Make a and 1/f read-only when preset is selected (but not custom)
+        aInput.readOnly = true;
+        fInvInput.readOnly = true;
+        fInput.readOnly = true;
+        
+        // Update info display
+        if (ellipsoidName) ellipsoidName.textContent = preset.name;
+        if (ellipsoidDetails) ellipsoidDetails.textContent = `a = ${preset.a} m | 1/f = ${preset.f_inv}`;
+    }
+
+    if (ellipsoidPreset) {
+        // Event listener for preset dropdown
+        ellipsoidPreset.addEventListener('change', function() {
+            updateFromPreset(this.value);
+        });
+
+        // Calculate f when 1/f changes (for custom mode)
+        fInvInput.addEventListener('input', function() {
+            if (ellipsoidPreset.value === 'custom') {
+                const f_inv = parseFloat(this.value) || 0;
+                if (f_inv > 0) {
+                    fInput.value = 1 / f_inv;
+                }
+            }
+        });
+
+        // Allow manual override of a in custom mode
+        aInput.addEventListener('focus', function() {
+            if (ellipsoidPreset.value !== 'custom') {
+                ellipsoidPreset.value = 'custom';
+                aInput.readOnly = false;
+                fInvInput.readOnly = false;
+                if (ellipsoidName) ellipsoidName.textContent = 'Custom Ellipsoid';
+                if (ellipsoidDetails) ellipsoidDetails.textContent = 'Enter your own parameters below';
+            }
+        });
+
+        // Allow manual override of 1/f in custom mode
+        fInvInput.addEventListener('focus', function() {
+            if (ellipsoidPreset.value !== 'custom') {
+                ellipsoidPreset.value = 'custom';
+                aInput.readOnly = false;
+                fInvInput.readOnly = false;
+                if (ellipsoidName) ellipsoidName.textContent = 'Custom Ellipsoid';
+                if (ellipsoidDetails) ellipsoidDetails.textContent = 'Enter your own parameters below';
+            }
+        });
+
+        // Initialize with WGS84
+        updateFromPreset('wgs84');
+    }
+}
+
+function showConversionType(type) {
+    const cartesianPanel = document.getElementById('cartesianConversionPanel');
+    const geodeticPanel = document.getElementById('geodeticConversionPanel');
+    const cartesianTab = document.getElementById('cartesianToGeodeticTab');
+    const geodeticTab = document.getElementById('geodeticToCartesianTab');
+    
+    if (!cartesianPanel || !geodeticPanel) return;
+    
+    if (type === 'cartesian') {
+        cartesianPanel.style.display = 'block';
+        geodeticPanel.style.display = 'none';
+        if (cartesianTab) cartesianTab.classList.add('active');
+        if (geodeticTab) geodeticTab.classList.remove('active');
+    } else {
+        cartesianPanel.style.display = 'none';
+        geodeticPanel.style.display = 'block';
+        if (cartesianTab) cartesianTab.classList.remove('active');
+        if (geodeticTab) geodeticTab.classList.add('active');
+    }
 }
 
 function updateFInv() {
@@ -101,7 +274,7 @@ async function initConverter() {
                 1/f = ${(1/data.f).toFixed(6)}<br>
                 e² = ${data.e2.toFixed(10)}<br>
                 b = ${data.b.toLocaleString()} m<br>
-                <span class="badge bg-info">MINIMUM 3 ITERATIONS will be performed for all points</span>
+                <span class="badge bg-info">Bidirectional conversion available - MINIMUM 3 ITERATIONS for Cartesian→Geodetic</span>
             `);
         } else {
             showError('initOutput', data.error);
@@ -112,9 +285,10 @@ async function initConverter() {
     }
 }
 
-function loadExample() {
+// Cartesian to Geodetic functions
+function loadCartesianExample() {
     const select = document.getElementById('examplePoints');
-    if (select.value) {
+    if (select && select.value) {
         const [x, y, z] = select.value.split(',').map(Number);
         document.getElementById('xValue').value = x;
         document.getElementById('yValue').value = y;
@@ -136,7 +310,7 @@ async function convertSingle() {
     console.log("Converting single point with session:", sessionId, pointName, X, Y, Z);
     
     try {
-        const response = await fetch('/api/convert/single', {
+        const response = await fetch('/api/convert/cartesian-to-geodetic', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
@@ -164,22 +338,66 @@ async function convertSingle() {
     }
 }
 
+async function convertCartesianToGeodetic() {
+    if (!sessionId) {
+        showError('singleOutput', 'Please initialize converter first!');
+        return;
+    }
+    
+    const pointName = document.getElementById('pointName').value || 'Point';
+    const X = parseFloat(document.getElementById('xValue').value) || 0;
+    const Y = parseFloat(document.getElementById('yValue').value) || 0;
+    const Z = parseFloat(document.getElementById('zValue').value) || 0;
+    
+    console.log("Converting Cartesian to Geodetic:", pointName, X, Y, Z);
+    
+    try {
+        const response = await fetch('/api/convert/cartesian-to-geodetic', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                session_id: sessionId,
+                point_name: pointName,
+                X: X,
+                Y: Y,
+                Z: Z
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            conversionHistory.push(data.result);
+            displayCartesianResult(data.result);
+        } else {
+            showError('singleOutput', data.error || 'Conversion failed');
+        }
+    } catch (error) {
+        console.error("Conversion error:", error);
+        showError('singleOutput', error.message);
+    }
+}
+
 function displaySingleResult(result) {
+    displayCartesianResult(result);
+}
+
+function displayCartesianResult(result) {
     const output = document.getElementById('singleOutput');
     
     let html = `
         <div class="alert alert-success">
-            <h6 class="alert-heading">✅ Conversion complete for ${result.point_name}</h6>
+            <h6 class="alert-heading">✅ Cartesian → Geodetic Conversion complete for ${result.point_name}</h6>
             <hr>
             <div class="row">
                 <div class="col-md-6">
-                    <strong>📌 INPUT:</strong><br>
+                    <strong>📌 INPUT (Cartesian):</strong><br>
                     X = ${result.X.toLocaleString()} m<br>
                     Y = ${result.Y.toLocaleString()} m<br>
                     Z = ${result.Z.toLocaleString()} m
                 </div>
                 <div class="col-md-6">
-                    <strong>📍 OUTPUT:</strong><br>
+                    <strong>📍 OUTPUT (Geodetic):</strong><br>
                     Latitude: ${result.latitude.toFixed(10)}°<br>
                     Longitude: ${result.longitude.toFixed(10)}°<br>
                     Height: ${result.height.toFixed(4)} m
@@ -217,21 +435,23 @@ function displaySingleResult(result) {
                         <tbody>
     `;
     
-    result.iterations.forEach(iter => {
-        html += `
-            <tr>
-                <td>${iter.iter}</td>
-                <td>${iter.lat.toFixed(10)}</td>
-                <td>${iter.h.toFixed(4)}</td>
-                <td>${iter.N.toFixed(2)}</td>
-                <td>${iter.p ? iter.p.toFixed(2) : 'N/A'}</td>
-                <td>${iter.sin_lat ? iter.sin_lat.toFixed(8) : 'N/A'}</td>
-                <td>${iter.cos_lat ? iter.cos_lat.toFixed(8) : 'N/A'}</td>
-                <td>${iter.delta_lat_arcsec.toFixed(8)}</td>
-                <td>${iter.delta_h_mm.toFixed(4)}</td>
-            </tr>
-        `;
-    });
+    if (result.iterations && result.iterations.length > 0) {
+        result.iterations.forEach(iter => {
+            html += `
+                <tr>
+                    <td>${iter.iter}</td>
+                    <td>${iter.lat.toFixed(10)}</td>
+                    <td>${iter.h.toFixed(4)}</td>
+                    <td>${iter.N ? iter.N.toFixed(2) : 'N/A'}</td>
+                    <td>${iter.p ? iter.p.toFixed(2) : 'N/A'}</td>
+                    <td>${iter.sin_lat ? iter.sin_lat.toFixed(8) : 'N/A'}</td>
+                    <td>${iter.cos_lat ? iter.cos_lat.toFixed(8) : 'N/A'}</td>
+                    <td>${iter.delta_lat_arcsec ? iter.delta_lat_arcsec.toFixed(8) : '0'}</td>
+                    <td>${iter.delta_h_mm ? iter.delta_h_mm.toFixed(4) : '0'}</td>
+                </tr>
+            `;
+        });
+    }
     
     html += `
                         </tbody>
@@ -244,20 +464,110 @@ function displaySingleResult(result) {
     output.innerHTML = html;
 }
 
-function showSample() {
-    const sampleOutput = document.getElementById('sampleOutput');
-    sampleOutput.style.display = 'block';
-    setTimeout(() => sampleOutput.style.display = 'none', 5000);
+// Geodetic to Cartesian functions
+function loadGeodeticExample() {
+    const select = document.getElementById('geodeticExamplePoints');
+    if (select && select.value) {
+        const [lat, lon, h] = select.value.split(',').map(Number);
+        document.getElementById('latValue').value = lat;
+        document.getElementById('lonValue').value = lon;
+        document.getElementById('hValue').value = h;
+    }
 }
 
+async function convertGeodeticToCartesian() {
+    if (!sessionId) {
+        showError('geodeticOutput', 'Please initialize converter first!');
+        return;
+    }
+    
+    const pointName = document.getElementById('geodeticPointName').value || 'Point';
+    const lat = parseFloat(document.getElementById('latValue').value) || 0;
+    const lon = parseFloat(document.getElementById('lonValue').value) || 0;
+    const h = parseFloat(document.getElementById('hValue').value) || 0;
+    
+    console.log("Converting Geodetic to Cartesian:", pointName, lat, lon, h);
+    
+    try {
+        const response = await fetch('/api/convert/geodetic-to-cartesian', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                session_id: sessionId,
+                point_name: pointName,
+                latitude: lat,
+                longitude: lon,
+                height: h
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            conversionHistory.push(data.result);
+            displayGeodeticResult(data.result);
+        } else {
+            showError('geodeticOutput', data.error || 'Conversion failed');
+        }
+    } catch (error) {
+        console.error("Conversion error:", error);
+        showError('geodeticOutput', error.message);
+    }
+}
+
+function displayGeodeticResult(result) {
+    const output = document.getElementById('geodeticOutput');
+    
+    let html = `
+        <div class="alert alert-success">
+            <h6 class="alert-heading">✅ Geodetic → Cartesian Conversion complete for ${result.point_name}</h6>
+            <hr>
+            <div class="row">
+                <div class="col-md-6">
+                    <strong>📌 INPUT (Geodetic):</strong><br>
+                    Latitude: ${result.latitude.toFixed(10)}°<br>
+                    Longitude: ${result.longitude.toFixed(10)}°<br>
+                    Height: ${result.height.toFixed(4)} m
+                </div>
+                <div class="col-md-6">
+                    <strong>📍 OUTPUT (Cartesian):</strong><br>
+                    X = ${result.X.toLocaleString()} m<br>
+                    Y = ${result.Y.toLocaleString()} m<br>
+                    Z = ${result.Z.toLocaleString()} m
+                </div>
+            </div>
+            <hr>
+            <div class="row">
+                <div class="col-md-12">
+                    <strong>🧮 Calculation Parameters:</strong><br>
+                    Radius of Curvature (N) = ${result.N ? result.N.toFixed(2) : 'N/A'} m<br>
+                    sin(lat) = ${result.sin_lat ? result.sin_lat.toFixed(8) : 'N/A'}<br>
+                    cos(lat) = ${result.cos_lat ? result.cos_lat.toFixed(8) : 'N/A'}
+                </div>
+            </div>
+            <hr>
+            <strong>⚡ Direct calculation</strong> (no iteration needed)
+        </div>
+    `;
+    
+    output.innerHTML = html;
+}
+
+// Batch processing
 async function processBatch() {
     if (!sessionId) {
         showError('batchOutput', 'Please initialize converter first! Click "Initialize Converter" in Step 1.');
         return;
     }
     
+    // Determine conversion type based on active tab
+    const cartesianPanel = document.getElementById('cartesianConversionPanel');
+    const isCartesianActive = cartesianPanel ? cartesianPanel.style.display !== 'none' : true;
+    const conversionType = isCartesianActive ? 'cartesian-to-geodetic' : 'geodetic-to-cartesian';
+    
     const formData = new FormData();
     formData.append('session_id', sessionId);
+    formData.append('conversion_type', conversionType);
     
     if (document.getElementById('uploadRadio').checked) {
         const fileInput = document.getElementById('csvFile');
@@ -292,7 +602,7 @@ async function processBatch() {
         if (data.success) {
             // Add to local history
             conversionHistory = conversionHistory.concat(data.results);
-            displayBatchResults(data);
+            displayBatchResults(data, conversionType);
         } else {
             showError('batchOutput', data.error);
         }
@@ -302,14 +612,16 @@ async function processBatch() {
     }
 }
 
-function displayBatchResults(data) {
+function displayBatchResults(data, conversionType) {
     const batchOutput = document.getElementById('batchOutput');
     const batchResults = document.getElementById('batchResults');
     
+    const typeText = conversionType === 'cartesian-to-geodetic' ? 'Cartesian → Geodetic' : 'Geodetic → Cartesian';
+    
     batchOutput.innerHTML = `
         <div class="alert alert-success">
-            ✅ Successfully processed ${data.total_processed} points with ${data.total_errors} errors<br>
-            <span class="badge bg-info">Minimum 3 iterations performed for each point</span>
+            ✅ Successfully processed ${data.total_processed} points (${typeText}) with ${data.total_errors} errors<br>
+            <span class="badge bg-info">${conversionType === 'cartesian-to-geodetic' ? 'Minimum 3 iterations performed for each point' : 'Direct calculation'}</span>
             <br><small>Total conversions in history: ${conversionHistory.length}</small>
         </div>
     `;
@@ -327,13 +639,17 @@ function displayBatchResults(data) {
         let html = `
             <div class="card mt-3">
                 <div class="card-header">
-                    <h6>📊 SUMMARY TABLE</h6>
+                    <h6>📊 SUMMARY TABLE - ${typeText}</h6>
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
                         <table class="table table-striped table-hover">
                             <thead>
                                 <tr>
+        `;
+        
+        if (conversionType === 'cartesian-to-geodetic') {
+            html += `
                                     <th>Point</th>
                                     <th>X (m)</th>
                                     <th>Y (m)</th>
@@ -342,14 +658,29 @@ function displayBatchResults(data) {
                                     <th>Longitude (°)</th>
                                     <th>Height (m)</th>
                                     <th>Iter</th>
+            `;
+        } else {
+            html += `
+                                    <th>Point</th>
+                                    <th>Latitude (°)</th>
+                                    <th>Longitude (°)</th>
+                                    <th>Height (m)</th>
+                                    <th>X (m)</th>
+                                    <th>Y (m)</th>
+                                    <th>Z (m)</th>
+            `;
+        }
+        
+        html += `
                                 </tr>
                             </thead>
                             <tbody>
         `;
         
         data.results.forEach(r => {
-            html += `
-                <tr>
+            html += '<tr>';
+            if (conversionType === 'cartesian-to-geodetic') {
+                html += `
                     <td>${r.point_name}</td>
                     <td>${r.X.toLocaleString()}</td>
                     <td>${r.Y.toLocaleString()}</td>
@@ -358,8 +689,19 @@ function displayBatchResults(data) {
                     <td>${r.longitude.toFixed(8)}</td>
                     <td>${r.height.toFixed(3)}</td>
                     <td>${r.total_iterations}</td>
-                </tr>
-            `;
+                `;
+            } else {
+                html += `
+                    <td>${r.point_name}</td>
+                    <td>${r.latitude.toFixed(8)}</td>
+                    <td>${r.longitude.toFixed(8)}</td>
+                    <td>${r.height.toFixed(3)}</td>
+                    <td>${r.X.toLocaleString()}</td>
+                    <td>${r.Y.toLocaleString()}</td>
+                    <td>${r.Z.toLocaleString()}</td>
+                `;
+            }
+            html += '</tr>';
         });
         
         html += `
@@ -370,60 +712,99 @@ function displayBatchResults(data) {
             </div>
         `;
         
-        // Show iteration details for first point with all parameters
-        if (data.results.length > 0) {
+        // Show iteration details for first point for Cartesian→Geodetic conversions
+        if (conversionType === 'cartesian-to-geodetic' && data.results.length > 0) {
             const first = data.results[0];
-            html += `
-                <div class="card mt-3">
-                    <div class="card-header">
-                        <h6>🔍 ITERATION DETAILS (First Point - ${first.point_name})</h6>
-                    </div>
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-sm table-bordered">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th>Iter</th>
-                                        <th>Latitude (°)</th>
-                                        <th>Height (m)</th>
-                                        <th>N (m)</th>
-                                        <th>p (m)</th>
-                                        <th>sin(lat)</th>
-                                        <th>cos(lat)</th>
-                                        <th>ΔLat (")</th>
-                                        <th>ΔH (mm)</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-            `;
-            
-            first.iterations.slice(0, 3).forEach(iter => {
+            if (first.iterations && first.iterations.length > 0) {
                 html += `
-                    <tr>
-                        <td>${iter.iter}</td>
-                        <td>${iter.lat.toFixed(10)}</td>
-                        <td>${iter.h.toFixed(4)}</td>
-                        <td>${iter.N.toFixed(2)}</td>
-                        <td>${iter.p ? iter.p.toFixed(2) : 'N/A'}</td>
-                        <td>${iter.sin_lat ? iter.sin_lat.toFixed(8) : 'N/A'}</td>
-                        <td>${iter.cos_lat ? iter.cos_lat.toFixed(8) : 'N/A'}</td>
-                        <td>${iter.delta_lat_arcsec.toFixed(8)}</td>
-                        <td>${iter.delta_h_mm.toFixed(4)}</td>
-                    </tr>
+                    <div class="card mt-3">
+                        <div class="card-header">
+                            <h6>🔍 ITERATION DETAILS (First Point - ${first.point_name})</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Iter</th>
+                                            <th>Latitude (°)</th>
+                                            <th>Height (m)</th>
+                                            <th>N (m)</th>
+                                            <th>p (m)</th>
+                                            <th>sin(lat)</th>
+                                            <th>cos(lat)</th>
+                                            <th>ΔLat (")</th>
+                                            <th>ΔH (mm)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
                 `;
-            });
-            
-            html += `
-                                </tbody>
-                            </table>
+                
+                first.iterations.slice(0, 3).forEach(iter => {
+                    html += `
+                        <tr>
+                            <td>${iter.iter}</td>
+                            <td>${iter.lat.toFixed(10)}</td>
+                            <td>${iter.h.toFixed(4)}</td>
+                            <td>${iter.N ? iter.N.toFixed(2) : 'N/A'}</td>
+                            <td>${iter.p ? iter.p.toFixed(2) : 'N/A'}</td>
+                            <td>${iter.sin_lat ? iter.sin_lat.toFixed(8) : 'N/A'}</td>
+                            <td>${iter.cos_lat ? iter.cos_lat.toFixed(8) : 'N/A'}</td>
+                            <td>${iter.delta_lat_arcsec ? iter.delta_lat_arcsec.toFixed(8) : '0'}</td>
+                            <td>${iter.delta_h_mm ? iter.delta_h_mm.toFixed(4) : '0'}</td>
+                        </tr>
+                    `;
+                });
+                
+                html += `
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
-                </div>
-            `;
+                `;
+            }
         }
         
         batchResults.innerHTML = html;
     }
+}
+
+function showSample() {
+    const sampleOutput = document.getElementById('sampleOutput');
+    if (!sampleOutput) return;
+    
+    const cartesianPanel = document.getElementById('cartesianConversionPanel');
+    const isCartesianActive = cartesianPanel ? cartesianPanel.style.display !== 'none' : true;
+    
+    if (isCartesianActive) {
+        sampleOutput.innerHTML = `
+            <pre class="bg-light p-3 rounded">
+Point_Name,X,Y,Z
+Equator,6378137,0,0
+North_Pole,0,0,6356752.314
+South_Pole,0,0,-6356752.314
+New_York,1334000,-4653000,4138000
+London,3980000,-100000,4960000
+Tokyo,-3950000,3350000,3700000
+            </pre>
+        `;
+    } else {
+        sampleOutput.innerHTML = `
+            <pre class="bg-light p-3 rounded">
+Point_Name,Latitude,Longitude,Height
+Equator,0,0,0
+North_Pole,90,0,0
+South_Pole,-90,0,0
+New_York,40.7128,-74.0060,120.45
+London,51.5074,-0.1278,45.0
+Tokyo,35.6762,139.6503,40.0
+            </pre>
+        `;
+    }
+    
+    sampleOutput.style.display = 'block';
+    setTimeout(() => sampleOutput.style.display = 'none', 5000);
 }
 
 async function generateReport() {
@@ -519,12 +900,18 @@ function displayReport(history, ellipsoidParams) {
     `;
     
     history.forEach((conv, index) => {
+        const convType = conv.input_type === 'cartesian' ? 'Cartesian → Geodetic' : 'Geodetic → Cartesian';
+        
         html += `
             <div class="card mt-3">
                 <div class="card-header bg-secondary text-white">
-                    <h6 class="mb-0">CONVERSION #${index + 1}: ${conv.point_name}</h6>
+                    <h6 class="mb-0">CONVERSION #${index + 1}: ${conv.point_name} (${convType})</h6>
                 </div>
                 <div class="card-body">
+        `;
+        
+        if (conv.input_type === 'cartesian') {
+            html += `
                     <div class="row">
                         <div class="col-md-4">
                             <strong>📌 INPUT (Cartesian):</strong><br>
@@ -540,8 +927,8 @@ function displayReport(history, ellipsoidParams) {
                         </div>
                         <div class="col-md-4">
                             <strong>🗺️ DMS Format:</strong><br>
-                            ${conv.latitude_dms}<br>
-                            ${conv.longitude_dms}
+                            ${conv.latitude_dms || 'N/A'}<br>
+                            ${conv.longitude_dms || 'N/A'}
                         </div>
                     </div>
                     
@@ -550,7 +937,10 @@ function displayReport(history, ellipsoidParams) {
                         Status: ${conv.converged ? '✓ Converged' : '✗ Did not converge'}<br>
                         Total Iterations: ${conv.total_iterations} (Minimum 3 enforced)
                     </div>
-                    
+            `;
+            
+            if (conv.all_iterations && conv.all_iterations.length > 0) {
+                html += `
                     <div class="mt-3">
                         <strong>📈 COMPLETE ITERATION DETAILS (${conv.all_iterations.length} iterations):</strong>
                         <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
@@ -572,32 +962,61 @@ function displayReport(history, ellipsoidParams) {
                                     </tr>
                                 </thead>
                                 <tbody>
-        `;
-        
-        conv.all_iterations.forEach(iter => {
-            html += `
-                <tr>
-                    <td>${iter.iter}</td>
-                    <td>${iter.lat.toFixed(10)}</td>
-                    <td>${iter.lat_rad ? iter.lat_rad.toFixed(10) : 'N/A'}</td>
-                    <td>${iter.h.toFixed(4)}</td>
-                    <td>${iter.N ? iter.N.toFixed(2) : 'N/A'}</td>
-                    <td>${iter.p ? iter.p.toFixed(2) : 'N/A'}</td>
-                    <td>${iter.sin_lat ? iter.sin_lat.toFixed(8) : 'N/A'}</td>
-                    <td>${iter.cos_lat ? iter.cos_lat.toFixed(8) : 'N/A'}</td>
-                    <td>${iter.delta_lat ? iter.delta_lat.toExponential(4) : '0'}</td>
-                    <td>${iter.delta_lat_arcsec ? iter.delta_lat_arcsec.toFixed(8) : '0'}</td>
-                    <td>${iter.delta_h ? iter.delta_h.toExponential(4) : '0'}</td>
-                    <td>${iter.delta_h_mm ? iter.delta_h_mm.toFixed(4) : '0'}</td>
-                </tr>
-            `;
-        });
-        
-        html += `
+                `;
+                
+                conv.all_iterations.forEach(iter => {
+                    html += `
+                        <tr>
+                            <td>${iter.iter}</td>
+                            <td>${iter.lat ? iter.lat.toFixed(10) : 'N/A'}</td>
+                            <td>${iter.lat_rad ? iter.lat_rad.toFixed(10) : 'N/A'}</td>
+                            <td>${iter.h ? iter.h.toFixed(4) : 'N/A'}</td>
+                            <td>${iter.N ? iter.N.toFixed(2) : 'N/A'}</td>
+                            <td>${iter.p ? iter.p.toFixed(2) : 'N/A'}</td>
+                            <td>${iter.sin_lat ? iter.sin_lat.toFixed(8) : 'N/A'}</td>
+                            <td>${iter.cos_lat ? iter.cos_lat.toFixed(8) : 'N/A'}</td>
+                            <td>${iter.delta_lat ? iter.delta_lat.toExponential(4) : '0'}</td>
+                            <td>${iter.delta_lat_arcsec ? iter.delta_lat_arcsec.toFixed(8) : '0'}</td>
+                            <td>${iter.delta_h ? iter.delta_h.toExponential(4) : '0'}</td>
+                            <td>${iter.delta_h_mm ? iter.delta_h_mm.toFixed(4) : '0'}</td>
+                        </tr>
+                    `;
+                });
+                
+                html += `
                                 </tbody>
                             </table>
                         </div>
                     </div>
+                `;
+            }
+        } else {
+            html += `
+                    <div class="row">
+                        <div class="col-md-6">
+                            <strong>📌 INPUT (Geodetic):</strong><br>
+                            Latitude: ${conv.latitude.toFixed(10)}°<br>
+                            Longitude: ${conv.longitude.toFixed(10)}°<br>
+                            Height: ${conv.height.toFixed(4)} m
+                        </div>
+                        <div class="col-md-6">
+                            <strong>📍 OUTPUT (Cartesian):</strong><br>
+                            X = ${conv.X.toLocaleString()} m<br>
+                            Y = ${conv.Y.toLocaleString()} m<br>
+                            Z = ${conv.Z.toLocaleString()} m
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3 p-2 bg-light rounded">
+                        <strong>🧮 Calculation Parameters:</strong><br>
+                        Radius of Curvature (N) = ${conv.N ? conv.N.toFixed(2) : 'N/A'} m<br>
+                        sin(lat) = ${conv.sin_lat ? conv.sin_lat.toFixed(8) : 'N/A'}<br>
+                        cos(lat) = ${conv.cos_lat ? conv.cos_lat.toFixed(8) : 'N/A'}
+                    </div>
+            `;
+        }
+        
+        html += `
                 </div>
             </div>
         `;
@@ -709,6 +1128,10 @@ function createPrintWindow(history, ellipsoidParams) {
                 font-weight: bold;
                 font-size: 11pt;
             }
+            .conversion-header .badge {
+                float: right;
+                font-size: 9pt;
+            }
             .coordinates-table {
                 width: 100%;
                 margin-bottom: 15px;
@@ -748,6 +1171,15 @@ function createPrintWindow(history, ellipsoidParams) {
                 border-left: 4px solid #28a745;
                 font-size: 9pt;
             }
+            .params-table {
+                width: 100%;
+                font-size: 9pt;
+                margin-bottom: 10px;
+            }
+            .params-table th {
+                background-color: #e0e0e0;
+                padding: 4px;
+            }
             .page-break {
                 page-break-before: always;
             }
@@ -761,10 +1193,10 @@ function createPrintWindow(history, ellipsoidParams) {
     </head>
     <body>
         <div class="report-header">
-            <h1>Cartesian to Geodetic Conversion Report</h1>
+            <h1>Geodetic Coordinate Conversion Report</h1>
             <p><strong>Generated:</strong> ${dateStr} at ${timeStr}</p>
             <p><strong>Session ID:</strong> ${sessionId}</p>
-            <p class="text-muted">MINIMUM 3 ITERATIONS FOR ALL POINTS - COMPLETE ITERATION DETAILS</p>
+            <p class="text-muted">Bidirectional Conversion - Cartesian ↔ Geodetic</p>
         </div>
     `;
     
@@ -801,27 +1233,34 @@ function createPrintWindow(history, ellipsoidParams) {
     
     // Add each conversion
     history.forEach((conv, index) => {
+        const convType = conv.input_type === 'cartesian' ? 'Cartesian → Geodetic' : 'Geodetic → Cartesian';
+        const badgeColor = conv.input_type === 'cartesian' ? 'primary' : 'success';
+        
         html += `
         <div class="conversion-section">
             <div class="conversion-header">
                 CONVERSION #${index + 1}: ${conv.point_name}
+                <span class="badge bg-${badgeColor}">${convType}</span>
             </div>
-            
+        `;
+        
+        if (conv.input_type === 'cartesian') {
+            html += `
             <table class="coordinates-table">
                 <tr>
-                    <td style="width: 33%;"><strong>📌 INPUT:</strong></td>
-                    <td style="width: 33%;"><strong>📍 OUTPUT:</strong></td>
+                    <td style="width: 33%;"><strong>📌 INPUT (Cartesian):</strong></td>
+                    <td style="width: 33%;"><strong>📍 OUTPUT (Geodetic):</strong></td>
                     <td style="width: 34%;"><strong>🗺️ DMS:</strong></td>
                 </tr>
                 <tr>
                     <td>X = ${conv.X.toLocaleString()} m</td>
                     <td>Lat: ${conv.latitude.toFixed(10)}°</td>
-                    <td>${conv.latitude_dms}</td>
+                    <td>${conv.latitude_dms || 'N/A'}</td>
                 </tr>
                 <tr>
                     <td>Y = ${conv.Y.toLocaleString()} m</td>
                     <td>Lon: ${conv.longitude.toFixed(10)}°</td>
-                    <td>${conv.longitude_dms}</td>
+                    <td>${conv.longitude_dms || 'N/A'}</td>
                 </tr>
                 <tr>
                     <td>Z = ${conv.Z.toLocaleString()} m</td>
@@ -834,7 +1273,10 @@ function createPrintWindow(history, ellipsoidParams) {
                 <strong>⚡ Convergence:</strong> ${conv.converged ? '✓ Converged' : '✗ Did not converge'} | 
                 <strong>Total Iterations:</strong> ${conv.total_iterations} (Minimum 3 enforced)
             </div>
+            `;
             
+            if (conv.all_iterations && conv.all_iterations.length > 0) {
+                html += `
             <table class="iteration-table">
                 <thead>
                     <tr>
@@ -853,33 +1295,74 @@ function createPrintWindow(history, ellipsoidParams) {
                     </tr>
                 </thead>
                 <tbody>
-        `;
-        
-        // Add all iterations
-        conv.all_iterations.forEach(iter => {
-            html += `
-                <tr>
-                    <td>${iter.iter}</td>
-                    <td>${iter.lat.toFixed(8)}</td>
-                    <td>${iter.lat_rad ? iter.lat_rad.toFixed(8) : 'N/A'}</td>
-                    <td>${iter.h.toFixed(3)}</td>
-                    <td>${iter.N ? iter.N.toFixed(1) : 'N/A'}</td>
-                    <td>${iter.p ? iter.p.toFixed(1) : 'N/A'}</td>
-                    <td>${iter.sin_lat ? iter.sin_lat.toFixed(6) : 'N/A'}</td>
-                    <td>${iter.cos_lat ? iter.cos_lat.toFixed(6) : 'N/A'}</td>
-                    <td>${iter.delta_lat ? iter.delta_lat.toExponential(2) : '0'}</td>
-                    <td>${iter.delta_lat_arcsec ? iter.delta_lat_arcsec.toFixed(4) : '0'}</td>
-                    <td>${iter.delta_h ? iter.delta_h.toExponential(2) : '0'}</td>
-                    <td>${iter.delta_h_mm ? iter.delta_h_mm.toFixed(2) : '0'}</td>
-                </tr>
-            `;
-        });
-        
-        html += `
+                `;
+                
+                conv.all_iterations.forEach(iter => {
+                    html += `
+                    <tr>
+                        <td>${iter.iter}</td>
+                        <td>${iter.lat ? iter.lat.toFixed(8) : 'N/A'}</td>
+                        <td>${iter.lat_rad ? iter.lat_rad.toFixed(8) : 'N/A'}</td>
+                        <td>${iter.h ? iter.h.toFixed(3) : 'N/A'}</td>
+                        <td>${iter.N ? iter.N.toFixed(1) : 'N/A'}</td>
+                        <td>${iter.p ? iter.p.toFixed(1) : 'N/A'}</td>
+                        <td>${iter.sin_lat ? iter.sin_lat.toFixed(6) : 'N/A'}</td>
+                        <td>${iter.cos_lat ? iter.cos_lat.toFixed(6) : 'N/A'}</td>
+                        <td>${iter.delta_lat ? iter.delta_lat.toExponential(2) : '0'}</td>
+                        <td>${iter.delta_lat_arcsec ? iter.delta_lat_arcsec.toFixed(4) : '0'}</td>
+                        <td>${iter.delta_h ? iter.delta_h.toExponential(2) : '0'}</td>
+                        <td>${iter.delta_h_mm ? iter.delta_h_mm.toFixed(2) : '0'}</td>
+                    </tr>
+                    `;
+                });
+                
+                html += `
                 </tbody>
             </table>
-        </div>
-        `;
+                `;
+            }
+        } else {
+            html += `
+            <table class="coordinates-table">
+                <tr>
+                    <td style="width: 50%;"><strong>📌 INPUT (Geodetic):</strong></td>
+                    <td style="width: 50%;"><strong>📍 OUTPUT (Cartesian):</strong></td>
+                </tr>
+                <tr>
+                    <td>Latitude: ${conv.latitude.toFixed(10)}°</td>
+                    <td>X = ${conv.X.toLocaleString()} m</td>
+                </tr>
+                <tr>
+                    <td>Longitude: ${conv.longitude.toFixed(10)}°</td>
+                    <td>Y = ${conv.Y.toLocaleString()} m</td>
+                </tr>
+                <tr>
+                    <td>Height: ${conv.height.toFixed(4)} m</td>
+                    <td>Z = ${conv.Z.toLocaleString()} m</td>
+                </tr>
+            </table>
+            
+            <table class="params-table">
+                <tr>
+                    <th colspan="2">🧮 Calculation Parameters</th>
+                </tr>
+                <tr>
+                    <td>Radius of Curvature (N):</td>
+                    <td>${conv.N ? conv.N.toFixed(2) : 'N/A'} m</td>
+                </tr>
+                <tr>
+                    <td>sin(lat):</td>
+                    <td>${conv.sin_lat ? conv.sin_lat.toFixed(8) : 'N/A'}</td>
+                </tr>
+                <tr>
+                    <td>cos(lat):</td>
+                    <td>${conv.cos_lat ? conv.cos_lat.toFixed(8) : 'N/A'}</td>
+                </tr>
+            </table>
+            `;
+        }
+        
+        html += `</div>`;
     });
     
     // Close the HTML
@@ -948,6 +1431,7 @@ async function clearResults() {
         // Just clear local display
         document.getElementById('reportOutput').innerHTML = '';
         document.getElementById('singleOutput').innerHTML = '';
+        document.getElementById('geodeticOutput').innerHTML = '';
         document.getElementById('batchResults').innerHTML = '';
         document.getElementById('batchOutput').innerHTML = '';
         conversionHistory = [];
@@ -967,6 +1451,7 @@ async function clearResults() {
             // Clear all displays
             document.getElementById('reportOutput').innerHTML = '';
             document.getElementById('singleOutput').innerHTML = '';
+            document.getElementById('geodeticOutput').innerHTML = '';
             document.getElementById('batchResults').innerHTML = '';
             document.getElementById('batchOutput').innerHTML = '';
             conversionHistory = [];
@@ -981,138 +1466,24 @@ async function clearResults() {
 // Utility functions
 function showError(elementId, message) {
     const element = document.getElementById(elementId);
-    element.innerHTML = `<div class="alert alert-danger">❌ ${message}</div>`;
-    element.style.display = 'block';
+    if (element) {
+        element.innerHTML = `<div class="alert alert-danger">❌ ${message}</div>`;
+        element.style.display = 'block';
+    }
 }
 
 function showSuccess(elementId, message) {
     const element = document.getElementById(elementId);
-    element.innerHTML = `<div class="alert alert-success">${message}</div>`;
-    element.style.display = 'block';
+    if (element) {
+        element.innerHTML = `<div class="alert alert-success">${message}</div>`;
+        element.style.display = 'block';
+    }
 }
 
 function showInfo(elementId, message) {
     const element = document.getElementById(elementId);
-    element.innerHTML = `<div class="alert alert-info">ℹ️ ${message}</div>`;
-    element.style.display = 'block';
+    if (element) {
+        element.innerHTML = `<div class="alert alert-info">ℹ️ ${message}</div>`;
+        element.style.display = 'block';
+    }
 }
-// Ellipsoid presets database
-const ellipsoidPresets = {
-    wgs84: {
-        name: 'WGS84',
-        a: 6378137.0,
-        f_inv: 298.257223563,
-        f: 0.0033528106647474805
-    },
-    grs80: {
-        name: 'GRS80',
-        a: 6378137.0,
-        f_inv: 298.257222101,
-        f: 0.003352891869237217
-    },
-    clarke1866: {
-        name: 'Clarke 1866',
-        a: 6378206.4,
-        f_inv: 294.9786982,
-        f: 0.003390075303596789
-    },
-    bessel1841: {
-        name: 'Bessel 1841',
-        a: 6377397.155,
-        f_inv: 299.1528128,
-        f: 0.003342773154788677
-    },
-    airy1830: {
-        name: 'Airy 1830',
-        a: 6377563.396,
-        f_inv: 299.3249646,
-        f: 0.003340850718970756
-    }
-};
-
-// Wait for DOM to load
-document.addEventListener('DOMContentLoaded', function() {
-    // Get DOM elements
-    const ellipsoidPreset = document.getElementById('ellipsoidPreset');
-    const aInput = document.getElementById('a_value');
-    const fInput = document.getElementById('f_value');
-    const fInvInput = document.getElementById('f_inv_value');
-    const ellipsoidName = document.getElementById('ellipsoidName');
-    const ellipsoidDetails = document.getElementById('ellipsoidDetails');
-
-    // Function to update inputs based on preset
-    function updateFromPreset(presetKey) {
-        if (presetKey === 'custom') {
-            // Enable manual input
-            aInput.readOnly = false;
-            fInvInput.readOnly = false;
-            fInput.readOnly = true; // f is still auto-calculated from 1/f
-            ellipsoidName.textContent = 'Custom Ellipsoid';
-            ellipsoidDetails.textContent = 'Enter your own parameters below';
-            return;
-        }
-
-        // Get preset data
-        const preset = ellipsoidPresets[presetKey];
-        if (!preset) return;
-
-        // Update inputs
-        aInput.value = preset.a;
-        fInvInput.value = preset.f_inv;
-        
-        // Calculate f from 1/f
-        const f = 1 / preset.f_inv;
-        fInput.value = f;
-        
-        // Make a and 1/f read-only when preset is selected (but not custom)
-        aInput.readOnly = true;
-        fInvInput.readOnly = true;
-        fInput.readOnly = true;
-        
-        // Update info display
-        ellipsoidName.textContent = preset.name;
-        ellipsoidDetails.textContent = `a = ${preset.a} m | 1/f = ${preset.f_inv}`;
-    }
-
-    // Event listener for preset dropdown
-    ellipsoidPreset.addEventListener('change', function() {
-        updateFromPreset(this.value);
-    });
-
-    // Calculate f when 1/f changes (for custom mode)
-    fInvInput.addEventListener('input', function() {
-        if (ellipsoidPreset.value === 'custom') {
-            const f_inv = parseFloat(this.value) || 0;
-            if (f_inv > 0) {
-                fInput.value = 1 / f_inv;
-            }
-        }
-    });
-
-    // Allow manual override of a in custom mode
-    aInput.addEventListener('focus', function() {
-        if (ellipsoidPreset.value !== 'custom') {
-            ellipsoidPreset.value = 'custom';
-            aInput.readOnly = false;
-            fInvInput.readOnly = false;
-            ellipsoidName.textContent = 'Custom Ellipsoid';
-            ellipsoidDetails.textContent = 'Enter your own parameters below';
-        }
-    });
-
-    // Allow manual override of 1/f in custom mode
-    fInvInput.addEventListener('focus', function() {
-        if (ellipsoidPreset.value !== 'custom') {
-            ellipsoidPreset.value = 'custom';
-            aInput.readOnly = false;
-            fInvInput.readOnly = false;
-            ellipsoidName.textContent = 'Custom Ellipsoid';
-            ellipsoidDetails.textContent = 'Enter your own parameters below';
-        }
-    });
-
-    // Initialize with WGS84
-    updateFromPreset('wgs84');
-
-});
-
