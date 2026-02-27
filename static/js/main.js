@@ -996,3 +996,121 @@ function showInfo(elementId, message) {
     element.innerHTML = `<div class="alert alert-info">ℹ️ ${message}</div>`;
     element.style.display = 'block';
 }
+// Ellipsoid presets database
+const ellipsoidPresets = {
+    wgs84: {
+        name: 'WGS84',
+        a: 6378137.0,
+        f_inv: 298.257223563,
+        f: 0.0033528106647474805
+    },
+    grs80: {
+        name: 'GRS80',
+        a: 6378137.0,
+        f_inv: 298.257222101,
+        f: 0.003352891869237217
+    },
+    clarke1866: {
+        name: 'Clarke 1866',
+        a: 6378206.4,
+        f_inv: 294.9786982,
+        f: 0.003390075303596789
+    },
+    bessel1841: {
+        name: 'Bessel 1841',
+        a: 6377397.155,
+        f_inv: 299.1528128,
+        f: 0.003342773154788677
+    },
+    airy1830: {
+        name: 'Airy 1830',
+        a: 6377563.396,
+        f_inv: 299.3249646,
+        f: 0.003340850718970756
+    }
+};
+
+// Wait for DOM to load
+document.addEventListener('DOMContentLoaded', function() {
+    // Get DOM elements
+    const ellipsoidPreset = document.getElementById('ellipsoidPreset');
+    const aInput = document.getElementById('a_value');
+    const fInput = document.getElementById('f_value');
+    const fInvInput = document.getElementById('f_inv_value');
+    const ellipsoidName = document.getElementById('ellipsoidName');
+    const ellipsoidDetails = document.getElementById('ellipsoidDetails');
+
+    // Function to update inputs based on preset
+    function updateFromPreset(presetKey) {
+        if (presetKey === 'custom') {
+            // Enable manual input
+            aInput.readOnly = false;
+            fInvInput.readOnly = false;
+            fInput.readOnly = true; // f is still auto-calculated from 1/f
+            ellipsoidName.textContent = 'Custom Ellipsoid';
+            ellipsoidDetails.textContent = 'Enter your own parameters below';
+            return;
+        }
+
+        // Get preset data
+        const preset = ellipsoidPresets[presetKey];
+        if (!preset) return;
+
+        // Update inputs
+        aInput.value = preset.a;
+        fInvInput.value = preset.f_inv;
+        
+        // Calculate f from 1/f
+        const f = 1 / preset.f_inv;
+        fInput.value = f;
+        
+        // Make a and 1/f read-only when preset is selected (but not custom)
+        aInput.readOnly = true;
+        fInvInput.readOnly = true;
+        fInput.readOnly = true;
+        
+        // Update info display
+        ellipsoidName.textContent = preset.name;
+        ellipsoidDetails.textContent = `a = ${preset.a} m | 1/f = ${preset.f_inv}`;
+    }
+
+    // Event listener for preset dropdown
+    ellipsoidPreset.addEventListener('change', function() {
+        updateFromPreset(this.value);
+    });
+
+    // Calculate f when 1/f changes (for custom mode)
+    fInvInput.addEventListener('input', function() {
+        if (ellipsoidPreset.value === 'custom') {
+            const f_inv = parseFloat(this.value) || 0;
+            if (f_inv > 0) {
+                fInput.value = 1 / f_inv;
+            }
+        }
+    });
+
+    // Allow manual override of a in custom mode
+    aInput.addEventListener('focus', function() {
+        if (ellipsoidPreset.value !== 'custom') {
+            ellipsoidPreset.value = 'custom';
+            aInput.readOnly = false;
+            fInvInput.readOnly = false;
+            ellipsoidName.textContent = 'Custom Ellipsoid';
+            ellipsoidDetails.textContent = 'Enter your own parameters below';
+        }
+    });
+
+    // Allow manual override of 1/f in custom mode
+    fInvInput.addEventListener('focus', function() {
+        if (ellipsoidPreset.value !== 'custom') {
+            ellipsoidPreset.value = 'custom';
+            aInput.readOnly = false;
+            fInvInput.readOnly = false;
+            ellipsoidName.textContent = 'Custom Ellipsoid';
+            ellipsoidDetails.textContent = 'Enter your own parameters below';
+        }
+    });
+
+    // Initialize with WGS84
+    updateFromPreset('wgs84');
+});
