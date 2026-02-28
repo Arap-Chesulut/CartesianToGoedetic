@@ -73,9 +73,6 @@ function setupEventListeners() {
     const convertCartesianBtn = document.getElementById('convertCartesianBtn');
     if (convertCartesianBtn) {
         convertCartesianBtn.addEventListener('click', convertCartesianToGeodetic);
-    } else {
-        // Fallback for backward compatibility
-        document.getElementById('convertSingleBtn').addEventListener('click', convertSingle);
     }
     
     // Single point conversion - Geodetic to Cartesian
@@ -103,6 +100,7 @@ function setupEventListeners() {
     document.getElementById('clearBtn').addEventListener('click', clearResults);
 }
 
+// Enhanced ellipsoid preset initialization
 function initEllipsoidPresets() {
     // Get DOM elements
     const ellipsoidPreset = document.getElementById('ellipsoidPreset');
@@ -111,6 +109,12 @@ function initEllipsoidPresets() {
     const fInvInput = document.getElementById('f_inv_value');
     const ellipsoidName = document.getElementById('ellipsoidName');
     const ellipsoidDetails = document.getElementById('ellipsoidDetails');
+    const resetBtn = document.getElementById('resetToWGS84Btn');
+
+    // Add reset button listener
+    if (resetBtn) {
+        resetBtn.addEventListener('click', resetToWGS84);
+    }
 
     // Function to update inputs based on preset
     function updateFromPreset(presetKey) {
@@ -119,8 +123,15 @@ function initEllipsoidPresets() {
             aInput.readOnly = false;
             fInvInput.readOnly = false;
             fInput.readOnly = true; // f is still auto-calculated from 1/f
-            if (ellipsoidName) ellipsoidName.textContent = 'Custom Ellipsoid';
-            if (ellipsoidDetails) ellipsoidDetails.textContent = 'Enter your own parameters below';
+            
+            // Update display
+            if (ellipsoidName) {
+                ellipsoidName.textContent = 'Custom Ellipsoid';
+                ellipsoidName.className = 'fw-bold text-warning';
+            }
+            if (ellipsoidDetails) {
+                ellipsoidDetails.innerHTML = 'Enter your own parameters below';
+            }
             return;
         }
 
@@ -136,14 +147,27 @@ function initEllipsoidPresets() {
         const f = 1 / preset.f_inv;
         fInput.value = f;
         
-        // Make a and 1/f read-only when preset is selected (but not custom)
+        // Make a and 1/f read-only when preset is selected
         aInput.readOnly = true;
         fInvInput.readOnly = true;
         fInput.readOnly = true;
         
-        // Update info display
-        if (ellipsoidName) ellipsoidName.textContent = preset.name;
-        if (ellipsoidDetails) ellipsoidDetails.textContent = `a = ${preset.a} m | 1/f = ${preset.f_inv}`;
+        // Update info display with more details
+        if (ellipsoidName) {
+            ellipsoidName.textContent = preset.name;
+            ellipsoidName.className = 'fw-bold text-primary';
+        }
+        
+        if (ellipsoidDetails) {
+            // Calculate e² and b for display
+            const e2 = (2 * f - f * f).toFixed(10);
+            const b = (preset.a * (1 - f)).toFixed(3);
+            
+            ellipsoidDetails.innerHTML = `
+                <span class="font-monospace">a = ${preset.a.toLocaleString()} m | 1/f = ${preset.f_inv}</span><br>
+                <small class="text-muted">e² = ${e2} | b = ${parseFloat(b).toLocaleString()} m</small>
+            `;
+        }
     }
 
     if (ellipsoidPreset) {
@@ -168,8 +192,13 @@ function initEllipsoidPresets() {
                 ellipsoidPreset.value = 'custom';
                 aInput.readOnly = false;
                 fInvInput.readOnly = false;
-                if (ellipsoidName) ellipsoidName.textContent = 'Custom Ellipsoid';
-                if (ellipsoidDetails) ellipsoidDetails.textContent = 'Enter your own parameters below';
+                if (ellipsoidName) {
+                    ellipsoidName.textContent = 'Custom Ellipsoid';
+                    ellipsoidName.className = 'fw-bold text-warning';
+                }
+                if (ellipsoidDetails) {
+                    ellipsoidDetails.textContent = 'Enter your own parameters below';
+                }
             }
         });
 
@@ -179,14 +208,45 @@ function initEllipsoidPresets() {
                 ellipsoidPreset.value = 'custom';
                 aInput.readOnly = false;
                 fInvInput.readOnly = false;
-                if (ellipsoidName) ellipsoidName.textContent = 'Custom Ellipsoid';
-                if (ellipsoidDetails) ellipsoidDetails.textContent = 'Enter your own parameters below';
+                if (ellipsoidName) {
+                    ellipsoidName.textContent = 'Custom Ellipsoid';
+                    ellipsoidName.className = 'fw-bold text-warning';
+                }
+                if (ellipsoidDetails) {
+                    ellipsoidDetails.textContent = 'Enter your own parameters below';
+                }
             }
         });
 
         // Initialize with WGS84
         updateFromPreset('wgs84');
     }
+}
+
+// Enhanced reset function
+function resetToWGS84() {
+    const presetSelect = document.getElementById('ellipsoidPreset');
+    const ellipsoidName = document.getElementById('ellipsoidName');
+    const ellipsoidDetails = document.getElementById('ellipsoidDetails');
+    
+    if (presetSelect) {
+        presetSelect.value = 'wgs84';
+        
+        // Trigger the preset update
+        const event = new Event('change', { bubbles: true });
+        presetSelect.dispatchEvent(event);
+        
+        // Update info display with WGS84 details
+        if (ellipsoidName) {
+            ellipsoidName.textContent = 'WGS84';
+            ellipsoidName.className = 'fw-bold text-primary';
+        }
+        if (ellipsoidDetails) {
+            ellipsoidDetails.innerHTML = 'a = 6378137.0 m | 1/f = 298.257223563';
+        }
+    }
+    
+    showInfo('initOutput', 'Reset to WGS84 ellipsoid parameters');
 }
 
 function showConversionType(type) {
@@ -296,46 +356,11 @@ function loadCartesianExample() {
     }
 }
 
-async function convertSingle() {
-    if (!sessionId) {
-        showError('singleOutput', 'Please initialize converter first! Click "Initialize Converter" in Step 1.');
-        return;
+function validateNumberInput(value, fieldName) {
+    if (value === null || value === '' || isNaN(value)) {
+        throw new Error(`${fieldName} must be a valid number`);
     }
-    
-    const pointName = document.getElementById('pointName').value || 'Point';
-    const X = parseFloat(document.getElementById('xValue').value) || 0;
-    const Y = parseFloat(document.getElementById('yValue').value) || 0;
-    const Z = parseFloat(document.getElementById('zValue').value) || 0;
-    
-    console.log("Converting single point with session:", sessionId, pointName, X, Y, Z);
-    
-    try {
-        const response = await fetch('/api/convert/cartesian-to-geodetic', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                session_id: sessionId,
-                point_name: pointName, 
-                X: X, 
-                Y: Y, 
-                Z: Z
-            })
-        });
-        
-        const data = await response.json();
-        console.log("Single conversion response:", data);
-        
-        if (data.success) {
-            // Add to local history
-            conversionHistory.push(data.result);
-            displaySingleResult(data.result);
-        } else {
-            showError('singleOutput', data.error || 'Conversion failed');
-        }
-    } catch (error) {
-        console.error("Single conversion error:", error);
-        showError('singleOutput', error.message);
-    }
+    return true;
 }
 
 async function convertCartesianToGeodetic() {
@@ -349,7 +374,22 @@ async function convertCartesianToGeodetic() {
     const Y = parseFloat(document.getElementById('yValue').value) || 0;
     const Z = parseFloat(document.getElementById('zValue').value) || 0;
     
+    try {
+        validateNumberInput(X, 'X');
+        validateNumberInput(Y, 'Y');
+        validateNumberInput(Z, 'Z');
+    } catch (error) {
+        showError('singleOutput', error.message);
+        return;
+    }
+    
     console.log("Converting Cartesian to Geodetic:", pointName, X, Y, Z);
+    
+    // Show loading state
+    const convertBtn = document.getElementById('convertCartesianBtn');
+    const originalText = convertBtn.innerHTML;
+    convertBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Converting...';
+    convertBtn.disabled = true;
     
     try {
         const response = await fetch('/api/convert/cartesian-to-geodetic', {
@@ -375,11 +415,11 @@ async function convertCartesianToGeodetic() {
     } catch (error) {
         console.error("Conversion error:", error);
         showError('singleOutput', error.message);
+    } finally {
+        // Restore button state
+        convertBtn.innerHTML = originalText;
+        convertBtn.disabled = false;
     }
-}
-
-function displaySingleResult(result) {
-    displayCartesianResult(result);
 }
 
 function displayCartesianResult(result) {
@@ -486,7 +526,22 @@ async function convertGeodeticToCartesian() {
     const lon = parseFloat(document.getElementById('lonValue').value) || 0;
     const h = parseFloat(document.getElementById('hValue').value) || 0;
     
+    try {
+        validateNumberInput(lat, 'Latitude');
+        validateNumberInput(lon, 'Longitude');
+        validateNumberInput(h, 'Height');
+    } catch (error) {
+        showError('geodeticOutput', error.message);
+        return;
+    }
+    
     console.log("Converting Geodetic to Cartesian:", pointName, lat, lon, h);
+    
+    // Show loading state
+    const convertBtn = document.getElementById('convertGeodeticBtn');
+    const originalText = convertBtn.innerHTML;
+    convertBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Converting...';
+    convertBtn.disabled = true;
     
     try {
         const response = await fetch('/api/convert/geodetic-to-cartesian', {
@@ -512,6 +567,10 @@ async function convertGeodeticToCartesian() {
     } catch (error) {
         console.error("Conversion error:", error);
         showError('geodeticOutput', error.message);
+    } finally {
+        // Restore button state
+        convertBtn.innerHTML = originalText;
+        convertBtn.disabled = false;
     }
 }
 
@@ -586,7 +645,7 @@ async function processBatch() {
         formData.append('file', blob, 'data.csv');
     }
     
-    showInfo('batchOutput', 'Processing...');
+    showInfo('batchOutput', '<div class="spinner-border spinner-border-sm" role="status"></div> Processing batch...');
     
     try {
         console.log("Processing batch with session:", sessionId);
@@ -821,6 +880,12 @@ async function generateReport() {
     console.log("Generating report for session:", sessionId);
     console.log("Local conversion history:", conversionHistory);
     
+    // Show loading state
+    const generateBtn = document.getElementById('generateReportBtn');
+    const originalText = generateBtn.innerHTML;
+    generateBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Generating...';
+    generateBtn.disabled = true;
+    
     try {
         const response = await fetch('/api/report', {
             method: 'POST',
@@ -839,6 +904,10 @@ async function generateReport() {
     } catch (error) {
         console.error("Report error:", error);
         showError('reportOutput', error.message);
+    } finally {
+        // Restore button state
+        generateBtn.innerHTML = originalText;
+        generateBtn.disabled = false;
     }
 }
 
@@ -1042,7 +1111,7 @@ function printReport() {
     }
     
     // Show loading message
-    showInfo('reportOutput', 'Preparing report for printing...');
+    showInfo('reportOutput', '<div class="spinner-border spinner-border-sm" role="status"></div> Preparing report for printing...');
     
     // First generate the report to get the data
     fetch('/api/report', {
@@ -1485,141 +1554,5 @@ function showInfo(elementId, message) {
     if (element) {
         element.innerHTML = `<div class="alert alert-info">ℹ️ ${message}</div>`;
         element.style.display = 'block';
-    }
-}
-// Add this new function for reset button
-function resetToWGS84() {
-    const presetSelect = document.getElementById('ellipsoidPreset');
-    if (presetSelect) {
-        presetSelect.value = 'wgs84';
-        
-        // Trigger the preset update
-        const event = new Event('change', { bubbles: true });
-        presetSelect.dispatchEvent(event);
-    }
-    
-    showInfo('initOutput', 'Reset to WGS84 ellipsoid parameters');
-}
-
-// Update the initEllipsoidPresets function with enhanced display
-function initEllipsoidPresets() {
-    // Get DOM elements
-    const ellipsoidPreset = document.getElementById('ellipsoidPreset');
-    const aInput = document.getElementById('a_value');
-    const fInput = document.getElementById('f_value');
-    const fInvInput = document.getElementById('f_inv_value');
-    const ellipsoidName = document.getElementById('ellipsoidName');
-    const ellipsoidDetails = document.getElementById('ellipsoidDetails');
-    const resetBtn = document.getElementById('resetToWGS84Btn');
-
-    // Add reset button listener
-    if (resetBtn) {
-        resetBtn.addEventListener('click', resetToWGS84);
-    }
-
-    // Function to update inputs based on preset
-    function updateFromPreset(presetKey) {
-        if (presetKey === 'custom') {
-            // Enable manual input
-            aInput.readOnly = false;
-            fInvInput.readOnly = false;
-            fInput.readOnly = true; // f is still auto-calculated from 1/f
-            
-            // Update display
-            if (ellipsoidName) {
-                ellipsoidName.textContent = 'Custom Ellipsoid';
-                ellipsoidName.className = 'fw-bold text-warning';
-            }
-            if (ellipsoidDetails) {
-                ellipsoidDetails.innerHTML = 'Enter your own parameters below';
-            }
-            return;
-        }
-
-        // Get preset data
-        const preset = ellipsoidPresets[presetKey];
-        if (!preset) return;
-
-        // Update inputs
-        aInput.value = preset.a;
-        fInvInput.value = preset.f_inv;
-        
-        // Calculate f from 1/f
-        const f = 1 / preset.f_inv;
-        fInput.value = f;
-        
-        // Make a and 1/f read-only when preset is selected
-        aInput.readOnly = true;
-        fInvInput.readOnly = true;
-        fInput.readOnly = true;
-        
-        // Update info display with more details
-        if (ellipsoidName) {
-            ellipsoidName.textContent = preset.name;
-            ellipsoidName.className = 'fw-bold text-primary';
-        }
-        
-        if (ellipsoidDetails) {
-            // Calculate e² and b for display
-            const e2 = (2 * f - f * f).toFixed(10);
-            const b = (preset.a * (1 - f)).toFixed(3);
-            
-            ellipsoidDetails.innerHTML = `
-                <span class="font-monospace">a = ${preset.a.toLocaleString()} m | 1/f = ${preset.f_inv}</span><br>
-                <small class="text-muted">e² = ${e2} | b = ${parseFloat(b).toLocaleString()} m</small>
-            `;
-        }
-    }
-
-    if (ellipsoidPreset) {
-        // Event listener for preset dropdown
-        ellipsoidPreset.addEventListener('change', function() {
-            updateFromPreset(this.value);
-        });
-
-        // Calculate f when 1/f changes (for custom mode)
-        fInvInput.addEventListener('input', function() {
-            if (ellipsoidPreset.value === 'custom') {
-                const f_inv = parseFloat(this.value) || 0;
-                if (f_inv > 0) {
-                    fInput.value = 1 / f_inv;
-                }
-            }
-        });
-
-        // Allow manual override of a in custom mode
-        aInput.addEventListener('focus', function() {
-            if (ellipsoidPreset.value !== 'custom') {
-                ellipsoidPreset.value = 'custom';
-                aInput.readOnly = false;
-                fInvInput.readOnly = false;
-                if (ellipsoidName) {
-                    ellipsoidName.textContent = 'Custom Ellipsoid';
-                    ellipsoidName.className = 'fw-bold text-warning';
-                }
-                if (ellipsoidDetails) {
-                    ellipsoidDetails.textContent = 'Enter your own parameters below';
-                }
-            }
-        });
-
-        // Allow manual override of 1/f in custom mode
-        fInvInput.addEventListener('focus', function() {
-            if (ellipsoidPreset.value !== 'custom') {
-                ellipsoidPreset.value = 'custom';
-                aInput.readOnly = false;
-                fInvInput.readOnly = false;
-                if (ellipsoidName) {
-                    ellipsoidName.textContent = 'Custom Ellipsoid';
-                    ellipsoidName.className = 'fw-bold text-warning';
-                }
-                if (ellipsoidDetails) {
-                    ellipsoidDetails.textContent = 'Enter your own parameters below';
-                }
-            }
-        });
-
-        // Initialize with WGS84
-        updateFromPreset('wgs84');
     }
 }
