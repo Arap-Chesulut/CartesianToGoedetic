@@ -24,31 +24,61 @@
             </div>
         </div>
 
-        <!-- Step 1: Initialize Converter -->
+        <!-- Step 1: Initialize Converter with Ellipsoid Presets -->
         <div class="card mb-4">
             <div class="card-header bg-primary text-white">
-                <h5 class="mb-0">Initial Step: Set Ellipsoid Parameters</h5>
+                <h5 class="mb-0">Step 1: Set Ellipsoid Parameters</h5>
             </div>
             <div class="card-body">
+                <!-- Ellipsoid Preset Dropdown -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Select Ellipsoid Preset</label>
+                        <select class="form-select" id="ellipsoidPreset">
+                            <option value="custom">-- Custom (Manual Input) --</option>
+                            <option value="wgs84" selected>WGS84 (World Geodetic System 1984)</option>
+                            <option value="grs80">GRS80 (Geodetic Reference System 1980)</option>
+                            <option value="clarke1866">Clarke 1866 (North American Datum)</option>
+                            <option value="bessel1841">Bessel 1841 (Central Europe)</option>
+                            <option value="airy1830">Airy 1830 (Great Britain)</option>
+                        </select>
+                        <small class="text-muted">Select a preset or choose "Custom" to enter your own values</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Ellipsoid Information</label>
+                        <div id="ellipsoidInfo" class="p-3 bg-light rounded" style="border-left: 4px solid #007bff;">
+                            <span id="ellipsoidName" class="fw-bold text-primary">WGS84</span><br>
+                            <span id="ellipsoidDetails" class="font-monospace">a = 6378137.0 m | 1/f = 298.257223563</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Parameter Input Fields -->
                 <div class="row g-3">
                     <div class="col-md-4">
                         <label class="form-label">Semi-major axis (a) in meters</label>
-                        <input type="number" class="form-control" id="a_value" value="6378137.0" step="any">
+                        <input type="number" class="form-control" id="a_value" value="6378137.0" step="any" readonly>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">Flattening (f)</label>
-                        <input type="number" class="form-control" id="f_value" value="0.003352810664747" step="any">
+                        <input type="number" class="form-control" id="f_value" value="0.003352810664747" step="any" readonly>
+                        <small class="text-muted">Automatically calculated from 1/f</small>
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label">1/f</label>
-                        <input type="number" class="form-control" id="f_inv_value" value="298.257223563" step="any">
+                        <label class="form-label">Inverse Flattening (1/f)</label>
+                        <input type="number" class="form-control" id="f_inv_value" value="298.257223563" step="any" readonly>
                     </div>
                 </div>
+                
                 <div class="mt-3">
                     <button class="btn btn-success" id="initBtn">
                         <i class="bi bi-check-circle"></i> Initialize Converter
                     </button>
+                    <button class="btn btn-outline-secondary ms-2" id="resetToWGS84Btn">
+                        <i class="bi bi-arrow-counterclockwise"></i> Reset to WGS84
+                    </button>
                 </div>
+                
                 <div id="initOutput" class="alert alert-info mt-3" style="display: none;"></div>
             </div>
         </div>
@@ -145,7 +175,7 @@
                                         <option value="-90,0,0">South Pole</option>
                                         <option value="40.7166482294,-74.0025746873,-956.814">New York Area</option>
                                         <option value="51.4348173533,-0.439289627,-4917.165">London Area</option>
-                                        <option value="35.7238086883,139.6986805173,-5747.5392">Tokyo Area</option>
+                                        <option value="35.7238086883,139.698786805173,-5747.5392">Tokyo Area</option>
                                     </select>
                                 </div>
                             </div>
@@ -172,9 +202,8 @@
                         </div>
                     </div>
 
-                    <!-- Batch Processing Tab (unchanged) -->
+                    <!-- Batch Processing Tab -->
                     <div class="tab-pane fade" id="batch" role="tabpanel">
-                        <!-- ... existing batch processing content ... -->
                         <div class="mb-3">
                             <div class="form-check">
                                 <input class="form-check-input" type="radio" name="inputMethod" id="uploadRadio" checked>

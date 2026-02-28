@@ -293,3 +293,118 @@ code,
         font-family: var(--font-mono);
     }
 }
+
+/* Add to your existing style.css */
+
+/* Ellipsoid info panel */
+#ellipsoidInfo {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border: 1px solid #dee2e6;
+    transition: all 0.3s ease;
+    min-height: 100px;
+}
+
+#ellipsoidInfo:hover {
+    box-shadow: 0 4px 8px rgba(0,123,255,0.1);
+    transform: translateY(-2px);
+}
+
+#ellipsoidName {
+    font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+    display: inline-block;
+    padding-bottom: 0.25rem;
+    border-bottom: 2px solid transparent;
+}
+
+#ellipsoidName.text-primary {
+    border-bottom-color: #007bff;
+}
+
+#ellipsoidName.text-warning {
+    border-bottom-color: #ffc107;
+}
+
+#ellipsoidDetails {
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+
+#ellipsoidDetails .font-monospace {
+    background-color: rgba(0,0,0,0.02);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+}
+
+/* Preset dropdown styling */
+#ellipsoidPreset {
+    background-color: white;
+    border: 2px solid #e0e0e0;
+    transition: all 0.3s ease;
+    font-family: var(--font-sans);
+    font-weight: 500;
+}
+
+#ellipsoidPreset:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,0.25);
+}
+
+#ellipsoidPreset option {
+    font-family: var(--font-sans);
+}
+
+/* Read-only input styling */
+input[readonly] {
+    background-color: #f8f9fa;
+    cursor: not-allowed;
+    opacity: 0.8;
+    border-color: #dee2e6;
+}
+
+input[readonly]:hover {
+    border-color: #ced4da;
+}
+
+input[readonly]:focus {
+    border-color: #dee2e6;
+    box-shadow: none;
+}
+
+/* Reset button */
+#resetToWGS84Btn {
+    transition: all 0.3s ease;
+    border-width: 2px;
+}
+
+#resetToWGS84Btn:hover {
+    background-color: #6c757d;
+    color: white;
+    border-color: #6c757d;
+    transform: translateY(-2px);
+}
+
+/* Small text for additional info */
+.small.text-muted {
+    font-size: 0.8rem;
+    margin-top: 0.25rem;
+    display: block;
+    font-family: var(--font-sans);
+}
+
+/* Enhanced form labels */
+.form-label.fw-bold {
+    color: #495057;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+
+/* Success button enhancement */
+.btn-success {
+    background: linear-gradient(135deg, #28a745, #20c997);
+    border: none;
+}
+
+.btn-success:hover {
+    background: linear-gradient(135deg, #218838, #1e7e34);
+}

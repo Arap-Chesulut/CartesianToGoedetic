@@ -1487,3 +1487,139 @@ function showInfo(elementId, message) {
         element.style.display = 'block';
     }
 }
+// Add this new function for reset button
+function resetToWGS84() {
+    const presetSelect = document.getElementById('ellipsoidPreset');
+    if (presetSelect) {
+        presetSelect.value = 'wgs84';
+        
+        // Trigger the preset update
+        const event = new Event('change', { bubbles: true });
+        presetSelect.dispatchEvent(event);
+    }
+    
+    showInfo('initOutput', 'Reset to WGS84 ellipsoid parameters');
+}
+
+// Update the initEllipsoidPresets function with enhanced display
+function initEllipsoidPresets() {
+    // Get DOM elements
+    const ellipsoidPreset = document.getElementById('ellipsoidPreset');
+    const aInput = document.getElementById('a_value');
+    const fInput = document.getElementById('f_value');
+    const fInvInput = document.getElementById('f_inv_value');
+    const ellipsoidName = document.getElementById('ellipsoidName');
+    const ellipsoidDetails = document.getElementById('ellipsoidDetails');
+    const resetBtn = document.getElementById('resetToWGS84Btn');
+
+    // Add reset button listener
+    if (resetBtn) {
+        resetBtn.addEventListener('click', resetToWGS84);
+    }
+
+    // Function to update inputs based on preset
+    function updateFromPreset(presetKey) {
+        if (presetKey === 'custom') {
+            // Enable manual input
+            aInput.readOnly = false;
+            fInvInput.readOnly = false;
+            fInput.readOnly = true; // f is still auto-calculated from 1/f
+            
+            // Update display
+            if (ellipsoidName) {
+                ellipsoidName.textContent = 'Custom Ellipsoid';
+                ellipsoidName.className = 'fw-bold text-warning';
+            }
+            if (ellipsoidDetails) {
+                ellipsoidDetails.innerHTML = 'Enter your own parameters below';
+            }
+            return;
+        }
+
+        // Get preset data
+        const preset = ellipsoidPresets[presetKey];
+        if (!preset) return;
+
+        // Update inputs
+        aInput.value = preset.a;
+        fInvInput.value = preset.f_inv;
+        
+        // Calculate f from 1/f
+        const f = 1 / preset.f_inv;
+        fInput.value = f;
+        
+        // Make a and 1/f read-only when preset is selected
+        aInput.readOnly = true;
+        fInvInput.readOnly = true;
+        fInput.readOnly = true;
+        
+        // Update info display with more details
+        if (ellipsoidName) {
+            ellipsoidName.textContent = preset.name;
+            ellipsoidName.className = 'fw-bold text-primary';
+        }
+        
+        if (ellipsoidDetails) {
+            // Calculate e² and b for display
+            const e2 = (2 * f - f * f).toFixed(10);
+            const b = (preset.a * (1 - f)).toFixed(3);
+            
+            ellipsoidDetails.innerHTML = `
+                <span class="font-monospace">a = ${preset.a.toLocaleString()} m | 1/f = ${preset.f_inv}</span><br>
+                <small class="text-muted">e² = ${e2} | b = ${parseFloat(b).toLocaleString()} m</small>
+            `;
+        }
+    }
+
+    if (ellipsoidPreset) {
+        // Event listener for preset dropdown
+        ellipsoidPreset.addEventListener('change', function() {
+            updateFromPreset(this.value);
+        });
+
+        // Calculate f when 1/f changes (for custom mode)
+        fInvInput.addEventListener('input', function() {
+            if (ellipsoidPreset.value === 'custom') {
+                const f_inv = parseFloat(this.value) || 0;
+                if (f_inv > 0) {
+                    fInput.value = 1 / f_inv;
+                }
+            }
+        });
+
+        // Allow manual override of a in custom mode
+        aInput.addEventListener('focus', function() {
+            if (ellipsoidPreset.value !== 'custom') {
+                ellipsoidPreset.value = 'custom';
+                aInput.readOnly = false;
+                fInvInput.readOnly = false;
+                if (ellipsoidName) {
+                    ellipsoidName.textContent = 'Custom Ellipsoid';
+                    ellipsoidName.className = 'fw-bold text-warning';
+                }
+                if (ellipsoidDetails) {
+                    ellipsoidDetails.textContent = 'Enter your own parameters below';
+                }
+            }
+        });
+
+        // Allow manual override of 1/f in custom mode
+        fInvInput.addEventListener('focus', function() {
+            if (ellipsoidPreset.value !== 'custom') {
+                ellipsoidPreset.value = 'custom';
+                aInput.readOnly = false;
+                fInvInput.readOnly = false;
+                if (ellipsoidName) {
+                    ellipsoidName.textContent = 'Custom Ellipsoid';
+                    ellipsoidName.className = 'fw-bold text-warning';
+                }
+                if (ellipsoidDetails) {
+                    ellipsoidDetails.textContent = 'Enter your own parameters below';
+                }
+            }
+        });
+
+        // Initialize with WGS84
+        updateFromPreset('wgs84');
+    }
+}
